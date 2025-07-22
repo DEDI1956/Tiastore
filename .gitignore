@@ -1,0 +1,8 @@
+# Dependencies
+/node_modules
+
+# Data
+/data/accounts.json
+
+# Config
+config.js

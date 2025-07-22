@@ -1,0 +1,14 @@
+{
+  "name": "telegram-gmail-bot",
+  "version": "1.0.0",
+  "description": "A Telegram bot to create and list Gmail accounts.",
+  "main": "bot/bot.js",
+  "scripts": {
+    "start": "node bot/bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.61.0",
+    "puppeteer": "^19.7.2",
+    "fs-extra": "^11.1.0"
+  }
+}

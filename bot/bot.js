@@ -1,7 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs-extra');
 const path = require('path');
-const { telegramToken } = require('../config');
+const { telegramToken } = require(path.resolve(__dirname, '../config.js'));
 const { createGmailAccount } = require('./gmailCreator');
 
 // Inisialisasi Bot
@@ -62,7 +62,7 @@ bot.on('callback_query', async (callbackQuery) => {
         bot.sendMessage(chatId, 'Silakan masukkan Nama Lengkap untuk akun Gmail:');
     } else if (data === 'list_gmail') {
         try {
-            const accountsPath = path.join(__dirname, '../data/accounts.json');
+            const accountsPath = path.resolve(__dirname, '../data/accounts.json');
             const accounts = await fs.readJson(accountsPath);
             if (accounts.length === 0) {
                 bot.sendMessage(chatId, 'Belum ada akun yang terdaftar.');
@@ -80,6 +80,7 @@ bot.on('callback_query', async (callbackQuery) => {
 
             bot.sendMessage(chatId, table, { parse_mode: 'Markdown' });
         } catch (error) {
+            console.error(error);
             bot.sendMessage(chatId, 'Gagal membaca daftar akun. Pastikan file `data/accounts.json` ada.');
         }
     }

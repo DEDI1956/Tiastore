@@ -3,11 +3,15 @@ const fs = require('fs-extra');
 const path = require('path');
 
 const accountsFilePath = path.resolve(__dirname, '../data/accounts.json');
+const errorScreenshotsPath = path.resolve(__dirname, '../error_screenshots');
+
+// Pastikan folder untuk screenshot ada
+fs.ensureDirSync(errorScreenshotsPath);
 
 async function createGmailAccount(fullName, password) {
     console.log('Memulai proses pembuatan akun...');
     const browser = await puppeteer.launch({
-        headless: true, // Gunakan 'false' untuk debugging visual
+        headless: "new", // Menggunakan mode headless baru
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -15,95 +19,91 @@ async function createGmailAccount(fullName, password) {
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process', //
             '--disable-gpu'
         ],
     });
 
     const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    await page.setViewport({ width: 1280, height: 800 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
 
     try {
         // Buka halaman pendaftaran Google
-        await page.goto('https://accounts.google.com/SignUp?hl=en', { waitUntil: 'networkidle2' });
+        await page.goto('https://accounts.google.com/SignUp?hl=en', { waitUntil: 'networkidle2', timeout: 60000 });
 
-        // Memecah nama lengkap menjadi nama depan dan belakang
+        // Tunggu dan isi nama depan
+        await page.waitForSelector('input[name="firstName"]', { timeout: 30000 });
         const nameParts = fullName.split(' ');
         const firstName = nameParts[0];
-        const lastName = nameParts.slice(1).join(' ') || nameParts[0]; // Jika hanya ada satu kata
+        const lastName = nameParts.slice(1).join(' ') || firstName;
+        await page.type('input[name="firstName"]', firstName, { delay: 120 });
+        await page.type('input[name="lastName"]', lastName, { delay: 130 });
 
-        // Isi nama depan dan belakang
-        await page.waitForSelector('input[name="firstName"]');
-        await page.type('input[name="firstName"]', firstName, { delay: 100 });
-        await page.type('input[name="lastName"]', lastName, { delay: 100 });
-        await page.click('button[jsname="LgbsSe"]'); // Next button
+        // Klik tombol "Next" untuk melanjutkan ke halaman berikutnya
+        await page.click('button[jsname="LgbsSe"]');
 
-        // Isi tanggal lahir (menggunakan tanggal acak)
-        await page.waitForSelector('select[id="month"]');
-        await page.select('select[id="month"]', String(Math.floor(Math.random() * 12) + 1));
+        // Tunggu halaman berikutnya (input tanggal lahir)
+        await page.waitForSelector('#month', { timeout: 30000 });
+
+        // Isi tanggal lahir
+        await page.select('#month', String(Math.floor(Math.random() * 12) + 1));
         await page.type('input[name="day"]', String(Math.floor(Math.random() * 28) + 1), { delay: 100 });
-        await page.type('input[name="year"]', String(1990 + Math.floor(Math.random() * 10)), { delay: 100 });
+        await page.type('input[name="year"]', String(1990 + Math.floor(Math.random() * 10)), { delay: 110 });
 
-        await page.waitForSelector('select[id="gender"]');
-        await page.select('select[id="gender"]', '3'); // "Rather not say"
-        await page.click('button[jsname="LgbsSe"]'); // Next button
+        // Isi gender
+        await page.waitForSelector('#gender', { timeout: 10000 });
+        await page.select('#gender', '3'); // "Rather not say"
+        await page.click('button[jsname="LgbsSe"]'); // Next
 
-        // Pilih alamat Gmail yang disarankan atau buat sendiri
-        await page.waitForSelector('div[jsname="o6uyZc"]');
-        // Klik pada pilihan pertama yang disarankan
+        // Pilih alamat Gmail
+        await page.waitForSelector('div[jsname="o6uyZc"]', { timeout: 30000 });
         await page.click('div[jsname="o6uyZc"] .j2FvD');
 
-        // Ambil email yang dipilih
         const selectedEmailElement = await page.$('div[jsname="o6uyZc"] .j2FvD .s2GmCe');
-        let generatedEmail = await page.evaluate(el => el.textContent.trim(), selectedEmailElement);
-        generatedEmail += "@gmail.com";
-
+        let generatedEmail = await page.evaluate(el => el.textContent.trim(), selectedEmailElement) + "@gmail.com";
+        console.log(`Email yang disarankan dipilih: ${generatedEmail}`);
         await page.click('button[jsname="LgbsSe"]'); // Next
 
         // Isi password
-        await page.waitForSelector('input[name="Passwd"]');
+        await page.waitForSelector('input[name="Passwd"]', { timeout: 30000 });
         await page.type('input[name="Passwd"]', password, { delay: 100 });
         await page.type('input[name="ConfirmPasswd"]', password, { delay: 100 });
         await page.click('button[jsname="LgbsSe"]'); // Next
 
-        // Di sini Google mungkin meminta verifikasi telepon.
-        // Kita coba untuk melewati ini. Jika halaman berikutnya adalah persetujuan, kita lanjut.
-        // Jika tidak, kita anggap gagal.
+        // Menunggu navigasi setelah password. Ini adalah titik kritis.
         console.log('Menunggu navigasi setelah memasukkan password...');
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
 
         const currentPageUrl = page.url();
         console.log('URL saat ini:', currentPageUrl);
 
-        // Jika URL berisi 'SignUpMobile', berarti verifikasi telepon diperlukan.
-        if (currentPageUrl.includes('SignUpMobile') || currentPageUrl.includes('VerifyPhoneNumber')) {
-            throw new Error('Google memerlukan verifikasi nomor telepon. Tidak dapat melanjutkan.');
+        if (currentPageUrl.includes('VerifyPhoneNumber') || currentPageUrl.includes('SignUpMobile')) {
+            throw new Error('Google memerlukan verifikasi nomor telepon.');
         }
 
-        // Lewati halaman "Add recovery email"
-        // Tombol "Skip" mungkin memiliki selector yang berbeda
-        const skipRecoverySelector = 'button[jsname="LgbsSe"]'; // Selector yang sama dengan "Next"
-        if (await page.$(skipRecoverySelector)) {
-            await page.click(skipRecoverySelector);
-            await page.waitForNavigation({ waitUntil: 'networkidle2' });
+        // Melewati halaman "Add recovery email" dan "Add phone number" jika ada
+        // Google terkadang menggunakan elemen yang sama untuk "Skip" dan "Next"
+        const skipButtonSelector = 'button[jsname="LgbsSe"]';
+        for (let i = 0; i < 2; i++) { // Coba lewati dua halaman (email pemulihan & no telp)
+            const skipButton = await page.$(skipButtonSelector);
+            if (skipButton) {
+                const buttonText = await page.evaluate(el => el.textContent.trim(), skipButton);
+                console.log(`Menemukan tombol: ${buttonText}`);
+                await skipButton.click();
+                await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 });
+                console.log(`Navigasi ke URL: ${page.url()}`);
+            }
         }
 
-        // Lewati halaman "Add phone number"
-        if (await page.$(skipRecoverySelector)) {
-            await page.click(skipRecoverySelector);
-            await page.waitForNavigation({ waitUntil: 'networkidle2' });
-        }
-
-        // Setuju dengan persyaratan layanan
-        await page.waitForSelector('button[jsname="LgbsSe"]');
+        // Halaman persetujuan akhir
+        await page.waitForSelector('button[jsname="LgbsSe"]', { timeout: 30000 });
         await page.click('button[jsname="LgbsSe"]'); // "I agree"
 
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 });
-
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 40000 });
         console.log('Akun berhasil dibuat:', generatedEmail);
 
-        // Simpan data ke file JSON
-        const accounts = await fs.readJson(accountsFilePath);
+        // Simpan ke file
+        const accounts = await fs.readJson(accountsFilePath).catch(() => []);
         accounts.push({
             name: fullName,
             email: generatedEmail,
@@ -116,9 +116,18 @@ async function createGmailAccount(fullName, password) {
         return { success: true, email: generatedEmail, password: password };
 
     } catch (error) {
-        console.error('Error selama pembuatan akun:', error);
+        console.error('Error selama pembuatan akun:', error.message);
+        const screenshotPath = path.join(errorScreenshotsPath, `error-${Date.now()}.png`);
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        console.log(`Screenshot error disimpan di: ${screenshotPath}`);
+
         await browser.close();
-        return { success: false, message: error.message };
+        // Mengirim pesan error yang lebih spesifik
+        let errorMessage = error.message;
+        if (error instanceof puppeteer.errors.TimeoutError) {
+            errorMessage = `Timeout: Halaman Google tidak merespons atau strukturnya berubah. Screenshot error telah disimpan di server.`;
+        }
+        return { success: false, message: errorMessage };
     }
 }
 

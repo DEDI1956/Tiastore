@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const fs = require('fs-extra');
 const path = require('path');
 
-const accountsFilePath = path.join(__dirname, '../data/accounts.json');
+const accountsFilePath = path.resolve(__dirname, '../data/accounts.json');
 
 async function createGmailAccount(fullName, password) {
     console.log('Memulai proses pembuatan akun...');
